@@ -10,6 +10,7 @@ namespace TaskManagement.Services.TaskManagement.Persistence
     internal class UnitOfWork : IUnitOfWork, IAsyncDisposable
     {
         private readonly TaskContext _taskContext;
+        private bool _commited = false;
         private IDbContextTransaction _dbContextTransaction;
 
         public UnitOfWork(TaskContext taskContext)
@@ -20,6 +21,7 @@ namespace TaskManagement.Services.TaskManagement.Persistence
         public async Task CommitAsync()
         {
             await _dbContextTransaction.CommitAsync();
+            _commited = true;
         }
 
 
@@ -35,7 +37,7 @@ namespace TaskManagement.Services.TaskManagement.Persistence
 
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
-            if (_dbContextTransaction != null)
+            if (_dbContextTransaction != null && !_commited)
             {
                 await this.RollbackAsync();
             }
