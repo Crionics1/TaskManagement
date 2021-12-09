@@ -45,39 +45,43 @@ namespace TaskManagement.Services.TaskManagement.Application.Task.Commands.Attac
 
         public async Task<List<Guid>> Handle(AttachFileCommand request, CancellationToken cancellationToken)
         {
-            var task = await _taskRepository.GetAsync(request.TaskId);
-
-            if (task == null)
+            await using (_unitOfWork)
             {
-                throw new NotFoundException("Invalid Task Id");
-            }
+                var task = await _taskRepository.GetAsync(request.TaskId);
 
-            var fileIds = new List<Guid>();
-
-            foreach (var item in request.Files)
-            {
-                var file = new File
+                if (task == null)
                 {
-                    Content = item.Bytes,
-                    Extension = item.Name,
-                    Name = item.Name,
-                    Size = item.Bytes.Length
-                };
+                    throw new NotFoundException("Invalid Task Id");
+                }
 
-                await _fileRepository.AddAsync(file);
+                var fileIds = new List<Guid>();
 
-                var taskAttachment = new TaskAttachment
+                foreach (var item in request.Files)
                 {
-                    FileId = file.Id,
-                    TaskId = task.Id
-                };
+                    var file = new File
+                    {
+                        Content = item.Bytes,
+                        Extension = item.Name,
+                        Name = item.Name,
+                        Size = item.Bytes.Length
+                    };
 
-                await _taskAttachmentRepository.AddAsync(taskAttachment);
+                    await _fileRepository.AddAsync(file);
 
-                fileIds.Add(file.Id);
+                    var taskAttachment = new TaskAttachment
+                    {
+                        FileId = file.Id,
+                        TaskId = task.Id
+                    };
+
+                    await _taskAttachmentRepository.AddAsync(taskAttachment);
+
+                    fileIds.Add(file.Id);
+                }
+
+                return fileIds;
             }
-
-            return fileIds;
+            
         }
     }
 }

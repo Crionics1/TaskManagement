@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace TaskManagement.Services.TaskManagement.Domain
 {
-    public interface IUnitOfWork
+    public interface IUnitOfWork : IAsyncDisposable
     {
         Task StartAsync();
         Task CommitAsync();

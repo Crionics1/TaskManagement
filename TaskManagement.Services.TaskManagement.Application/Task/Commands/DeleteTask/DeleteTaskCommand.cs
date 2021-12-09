@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TaskManagement.Services.TaskManagement.Application.Exceptions;
+using TaskManagement.Services.TaskManagement.Domain;
 using TaskManagement.Services.TaskManagement.Domain.Repositories;
 
 namespace TaskManagement.Services.TaskManagement.Application.Task.Commands.DeleteTask
@@ -21,38 +22,49 @@ namespace TaskManagement.Services.TaskManagement.Application.Task.Commands.Delet
         private readonly ITaskRepository _repository;
         private readonly IRepository<Domain.Entities.TaskAttachment, int> _taskAttachmentRepository;
         private readonly IRepository<Domain.Entities.File, Guid> _fileRepository;
+        private readonly IUnitOfWork unitofwork;
 
         public DeleteTaskCommandHandler(ITaskRepository repository,
             IRepository<TaskManagement.Domain.Entities.TaskAttachment, int> taskAttachmentRepository,
-            IRepository<TaskManagement.Domain.Entities.File, Guid> fileRepository)
+            IRepository<TaskManagement.Domain.Entities.File, Guid> fileRepository,
+            IUnitOfWork unitofwork)
         {
             _repository = repository;
             _taskAttachmentRepository = taskAttachmentRepository;
             _fileRepository = fileRepository;
+            this.unitofwork = unitofwork;
         }
 
         public async Task<Unit> Handle(DeleteTaskCommand request, CancellationToken cancellationToken)
         {
-            var entity = await _repository.GetAsync(request.TaskId.Value);
-
-            if (entity == null)
+            await using (unitofwork)
             {
-                throw new NotFoundException("Task not Found");
+                await unitofwork.StartAsync();
+
+                var entity = await _repository.GetAsync(request.TaskId.Value);
+
+                if (entity == null)
+                {
+                    throw new NotFoundException("Task not Found");
+                }
+
+                var taskAttachments = await _repository.GetTaskAttachmentsAsync(entity.Id);
+
+                foreach (var item in taskAttachments)
+                {
+                    await _taskAttachmentRepository.RemoveAsync(item);
+
+                    //probably better to delete without loading into memory
+                    var file = await _fileRepository.GetAsync(item.FileId);
+                    await _fileRepository.RemoveAsync(file);
+                }
+
+
+                await _repository.RemoveAsync(entity);
+
+                await unitofwork.CommitAsync();
             }
-
-            var taskAttachments = await _repository.GetTaskAttachmentsAsync(entity.Id);
-
-            foreach (var item in taskAttachments)
-            {
-                await _taskAttachmentRepository.RemoveAsync(item);
-                
-                //probably better to delete without loading into memory
-                var file = await _fileRepository.GetAsync(item.FileId);
-                await _fileRepository.RemoveAsync(file);
-            }
-
-
-            await _repository.RemoveAsync(entity);
+            
 
             return Unit.Value;
         }
